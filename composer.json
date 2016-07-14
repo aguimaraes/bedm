@@ -7,7 +7,8 @@
     "require": {
         "php": ">=5.5.9",
         "laravel/framework": "5.2.*",
-        "nfephp-org/nfephp": "dev-master#3.10-Obsoleto"
+        "nfephp-org/sped-mdfe": "dev-master",
+        "phpgt/dom": "^0.0.3"
     },
     "require-dev": {
         "fzaninotto/faker": "~1.4",

@@ -5,3 +5,7 @@ Homestead.yaml
 Homestead.json
 .env
 *.sublime-workspace
+.idea
+storage/mdfe/homologacao/
+storage/mdfe/producao/
+storage/certs/
