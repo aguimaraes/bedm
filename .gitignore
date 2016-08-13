@@ -9,3 +9,5 @@ Homestead.json
 storage/mdfe/homologacao/
 storage/mdfe/producao/
 storage/certs/
+_ide_helper.php
+.phpstorm.meta.php
