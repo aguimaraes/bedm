@@ -33,6 +33,26 @@ class MDFe extends Command
     protected $lotModel;
 
     /**
+     * @var string
+     */
+    protected $originalFilePath;
+
+    /**
+     * @var string
+     */
+    protected $signedFilePath;
+
+    /**
+     * @var string
+     */
+    protected $cnpj;
+
+    /**
+     * @var string
+     */
+    protected $basePath;
+
+    /**
      * The name and signature of the console command.
      *
      * @var string
@@ -54,14 +74,35 @@ class MDFe extends Command
 
         $this->key = $this->argument('key');
 
-        try {
+        $this->cnpj = substr($this->key, 6, 14);
 
+        try {
             $config = json_decode(file_get_contents(storage_path('mdfe.json')));
 
-            $config->cnpj = '51013233000402';
+            $config->cnpj = $this->cnpj;
 
-            //35160751013233000402580010000000391000949083
-            $mdfe = file_get_contents(storage_path("mdfe/{$this->key}-mdfe.xml"));
+            $baseDir = $this->environment == "1" ? 'production' : 'testing';
+
+            $date = date('Ym');
+
+            $path = "mdfe/{$baseDir}/{$this->cnpj}/{$date}";
+
+            $directory = storage_path($path);
+
+            $this->basePath = $directory;
+
+            if (!is_dir($directory) && !mkdir($directory, 0777, true)) {
+                throw new \Exception("Não consegui criar o diretório.");
+            }
+
+            $this->originalFilePath = "{$directory}/{$this->key}-mdfe.xml";
+
+            if (!is_readable($this->originalFilePath)) {
+                throw new \Exception("Não consegui encontrar o arquivo original.");
+            }
+
+            // 35160751013233000402580010000000391000949083
+            $mdfe = file_get_contents($this->originalFilePath);
 
             $tool = new Tools(json_encode($config));
 
@@ -69,6 +110,12 @@ class MDFe extends Command
 
             // assina o xml
             $signed = $tool->assina($mdfe);
+
+            $this->signedFilePath = "{$directory}/{$this->key}-signed.xml";
+
+            if (!file_put_contents($this->signedFilePath, $signed)) {
+                throw new \Exception("Não consegui gravar o arquivo assinado.");
+            }
 
             $sendXML = $this->sendLot($signed);
 
@@ -79,6 +126,9 @@ class MDFe extends Command
         } catch (InvalidArgumentException $e) {
 
             $this->error($e->getMessage());
+
+            $file = "{$this->basePath}/$key.err";
+            file_put_contents($file, $e->getMessage());
 
         }
     }
@@ -201,7 +251,14 @@ class MDFe extends Command
 
     private function writeProtocol()
     {
-
+        $namespace = $this->environment == 1 ? 'producao' : 'homologacao';
+        $date = date('Ym');
+        $receipt = $this->lotModel->receipt;
+        $protocolPath = storage_path("mdfe/{$namespace}/temporarias/{$date}/{$receipt}-retConsReciMDFe.xml");
+        $withProtocol = $this->tool->addProtocolo($this->signedFilePath, $protocolPath);
+        if (!file_put_contents("{$this->basePath}/{$this->key}-protMDFe.xml", $withProtocol)) {
+            throw new \Exception('Não consegui salvar o MDFe com protocolo.');
+        }
     }
 
     private function documentUnauthorized($protocol, Protocol $protocolModel)
