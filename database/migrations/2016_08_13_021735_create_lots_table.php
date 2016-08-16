@@ -17,6 +17,7 @@ class CreateLotsTable extends Migration
             $table->integer('environment');
             $table->string('receipt')->nullable();
             $table->string('status_code')->nullable();
+            $table->string('status_msg')->nullable();
             $table->string('mdfe')->nullable();
             $table->timestamps();
         });

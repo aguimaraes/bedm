@@ -17,6 +17,7 @@ class CreateReceiptsTable extends Migration
             $table->string('environment');
             $table->string('mdfe')->nullable();
             $table->string('status_code')->nullable();
+            $table->string('status_msg')->nullable();
             $table->string('receipt')->nullable();
             $table->timestamps();
         });

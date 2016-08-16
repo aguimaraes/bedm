@@ -20,7 +20,7 @@ class CreateProtocolsTable extends Migration
             $table->string('protocol')->nullable();
             $table->string('digval')->nullable();
             $table->string('status_code')->nullable();
-            $table->string('reason')->nullable();
+            $table->string('status_msg')->nullable();
             $table->timestamps();
         });
     }

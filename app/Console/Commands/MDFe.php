@@ -5,9 +5,12 @@ namespace App\Console\Commands;
 use App\Lot;
 use App\Protocol;
 use App\Receipt;
-use NFePHP\MDFe\Tools;
+use DB;
+use File;
 use Illuminate\Console\Command;
+use Log;
 use NFePHP\Common\Exception\InvalidArgumentException;
+use NFePHP\MDFe\Tools;
 
 class MDFe extends Command
 {
@@ -68,8 +71,6 @@ class MDFe extends Command
 
     public function handle()
     {
-        define('NFEPHP_ROOT', storage_path('mdfe/'));
-
         $this->environment = $this->argument('environment');
 
         $this->key = $this->argument('key');
@@ -77,133 +78,232 @@ class MDFe extends Command
         $this->cnpj = substr($this->key, 6, 14);
 
         try {
-            $config = json_decode(file_get_contents(storage_path('mdfe.json')));
 
-            $config->cnpj = $this->cnpj;
+            $tool = $this->getTool();
 
-            $baseDir = $this->environment == "1" ? 'production' : 'testing';
-
-            $date = date('Ym');
-
-            $path = "mdfe/{$baseDir}/{$this->cnpj}/{$date}";
-
-            $directory = storage_path($path);
-
-            $this->basePath = $directory;
-
-            if (!is_dir($directory) && !mkdir($directory, 0777, true)) {
-                throw new \Exception("Não consegui criar o diretório.");
-            }
-
-            $this->originalFilePath = "{$directory}/{$this->key}-mdfe.xml";
-
-            if (!is_readable($this->originalFilePath)) {
-                throw new \Exception("Não consegui encontrar o arquivo original.");
+            if ($receipt = $this->getWaitingReceipt()) {
+                $this->getReceipt($receipt->receipt);
+                die;
             }
 
             // 35160751013233000402580010000000391000949083
-            $mdfe = file_get_contents($this->originalFilePath);
+            $originalFile = $this->getOriginalFile();
 
-            $tool = new Tools(json_encode($config));
+            $signedFile = $this->signOriginalFile($originalFile);
 
-            $this->tool = $tool;
+            $this->persistSignedFile($signedFile);
 
-            // assina o xml
-            $signed = $tool->assina($mdfe);
+            $lot = $this->sendLot($signedFile);
 
-            $this->signedFilePath = "{$directory}/{$this->key}-signed.xml";
-
-            if (!file_put_contents($this->signedFilePath, $signed)) {
-                throw new \Exception("Não consegui gravar o arquivo assinado.");
-            }
-
-            $sendXML = $this->sendLot($signed);
-
-            $recipeNumber = $this->getRecipeNumber($sendXML);
-
-            $recipe = $this->getRecipe($recipeNumber);
+            $this->getReceipt($lot->receipt);
 
         } catch (InvalidArgumentException $e) {
 
-            $this->error($e->getMessage());
-
-            $file = "{$this->basePath}/$key.err";
-            file_put_contents($file, $e->getMessage());
+            $this->writeResult($e->getMessage(), 'error', $e->getMessage());
 
         }
     }
 
     /**
-     * @param $signed
-     *
-     * @return \DOMDocument
-     */
-    private function sendLot($signed)
-    {
-        $lotModel = Lot::create([
-            'environment' => $this->environment,
-            'mdfe' => $this->key
-        ]);
-
-        $this->lotModel = $lotModel;
-
-        $sendXMLString = $this->tool->sefazEnviaLote($signed, $this->environment, $lotModel->id);
-
-        $sendXML = new \DOMDocument();
-
-        $sendXML->loadXML($sendXMLString);
-
-        return $sendXML;
-    }
-
-    /**
-     * @param \DOMDocument $answer
+     * Retorna o arquivo original e salva o caminho do arquivo
      *
      * @return string
      */
-    private function getRecipeNumber(\DOMDocument $answer)
+    private function getOriginalFile()
     {
-        $recipeNumber = $answer->getElementsByTagName('nRec');
-        if (! $recipeNumber->length) {
+        $inbox = env('MDFE_INBOX', storage_path('mdfe/inbox'));
+        $this->originalFilePath = "{$inbox}/{$this->key}-mdfe.xml";
+        return File::get($this->originalFilePath);
+    }
+
+    /**
+     * @return bool
+     */
+    private function deleteOriginalFile()
+    {
+        return File::delete($this->originalFilePath);
+    }
+
+    /**
+     * @param string $file
+     *
+     * @return string
+     */
+    private function signOriginalFile(string $file)
+    {
+        try {
+
+            return $this->tool->assina($file);
+
+        } catch (\Exception $e) {
+            Log::error($e->getMessage());
+            $this->error("Não consegui assinar esse documento.");
+            die;
+        }
+    }
+
+    /**
+     * @param string $file
+     *
+     * @return int
+     */
+    private function persistSignedFile(string $file)
+    {
+        $this->signedFilePath = "{$this->basePath}/{$this->key}-mdfe-signed.xml";
+        return (boolean) File::put($this->signedFilePath, $file);
+    }
+
+    /**
+     * Configura e retorna a classe Tools
+     *
+     * @return Tools
+     */
+    private function getTool()
+    {
+        define('NFEPHP_ROOT', storage_path('mdfe/'));
+
+        $config = json_decode(file_get_contents(storage_path('mdfe.json')));
+
+        $config->cnpj = $this->cnpj;
+
+        $tool = new Tools(json_encode($config));
+
+        $this->tool = $tool;
+
+        $envName = $this->environment == '1' ? 'production' : 'testing';
+
+        $year = date('Y');
+
+        $this->basePath = storage_path("mdfe/{$envName}/{$year}");
+
+        if (!is_dir($this->basePath)) {
+            mkdir($this->basePath, 0777, true);
+        }
+
+        return $tool;
+    }
+
+    /**
+     * Retorna um recibo caso ele seja o último e esteja com o código 105.
+     *
+     * @return false|Receipt
+     */
+    private function getWaitingReceipt()
+    {
+        $receipt = Receipt::latest()->first();
+
+        if (empty($receipt) || $receipt->status_code != '105') {
+            return false;
+        }
+
+        return $receipt;
+    }
+
+    /**
+     * @param $signedXML
+     *
+     * @return Lot
+     */
+    private function sendLot($signedXML)
+    {
+        $lot = $this->startLotPersistence();
+
+        $lotResponse = $this->tool->sefazEnviaLote($signedXML, $this->environment, $lot->id);
+
+        $data = $this->parseLotResponse($lotResponse);
+
+        $lot = $this->commitLotPersistence($lot, $data);
+
+        return $lot;
+    }
+
+    /**
+     * @return Lot
+     */
+    private function startLotPersistence()
+    {
+        DB::beginTransaction();
+        $lot = Lot::create([
+            'environment' => $this->environment,
+            'mdfe' => $this->key,
+        ]);
+        $this->lotModel = $lot;
+        return $lot;
+    }
+
+    /**
+     * @param string $response
+     *
+     * @return array
+     */
+    private function parseLotResponse(string $response)
+    {
+        $data = [];
+
+        $MDFe = new \DOMDocument();
+
+        $MDFe->loadXML($response);
+
+        $receiptNumber = $MDFe->getElementsByTagName('nRec');
+        if (! $receiptNumber->length) {
             throw \Exception('Não encontrei o número do recibo. Documento não enviado.');
         }
-        $receiptNumber = $recipeNumber->item(0)->nodeValue;
+        $data['receipt'] = $receiptNumber->item(0)->nodeValue;
 
-        $cStat = $answer->getElementsByTagName('cStat');
-        if (!$cStat->length) {
+        $code = $MDFe->getElementsByTagName('cStat');
+        if (!$code->length) {
             throw \Exception("Não encontrei o código do status desse recibo.");
         }
-        $code = $cStat->item(0)->nodeValue;
-        $this->lotModel->update([
-            'receipt' => $receiptNumber,
-            'status_code' => $code,
-        ]);
-        return $receiptNumber;
-    }
+        $data['status_code'] = $code->item(0)->nodeValue;
 
-    private function getRecipe($recipeNumber)
-    {
-        $answer = $this->tool->sefazConsultaRecibo($recipeNumber, (string) $this->environment, $result);
-        \Log::debug("Raw Lot response: {$answer}");
-        if ($result['bStat']) {
-            return $this->processPositiveLotResult($result);
+        $reason = $MDFe->getElementsByTagName('xMotivo');
+        if (!$reason->length) {
+            throw \Exception("Não encontrei o código do status desse recibo.");
         }
-        return $this->processNegativeLotResult($result);
+        $data['status_msg'] = $reason->item(0)->nodeValue;
+
+        return $data;
     }
 
-    private function processPositiveLotResult($result)
+    /**
+     * @param Lot $lot
+     * @param array $data
+     *
+     * @return Lot
+     */
+    private function commitLotPersistence(Lot $lot, array $data)
     {
-        $this->info("Lote enviado.");
-        $receiptModel = Receipt::create([
+        $this->info('Lote enviado.');
+        $lot->update($data);
+        DB::commit();
+        return $lot;
+    }
+
+    /**
+     * @param $number
+     *
+     * @return array
+     */
+    private function getReceipt($number)
+    {
+        $this->tool->sefazConsultaRecibo($number, (string) $this->environment, $receipt);
+        $this->parseReceiptResponse($receipt);
+        return $receipt;
+    }
+
+    private function parseReceiptResponse(array $result)
+    {
+        $receipt = Receipt::create([
             'environment' => $this->environment,
             'status_code' => $result['cStat'],
+            'status_msg' => $result['xMotivo'],
             'receipt' => $result['nRec'],
             'mdfe' => $this->key,
         ]);
-        if ($result['cStat'] == "104") {
-            // arquivo processado
-            return $this->lotWasProcessed($result);
-        } elseif ($result['cStat'] === "105") {
+
+        if ($result['cStat'] == "104") { // processado?
+            return $this->parseProtocol($result);
+        } elseif ($result['cStat'] == "105") {
             return $this->lotIsWaiting($result);
         }
 
@@ -215,20 +315,18 @@ class MDFe extends Command
         $this->error("Lote não enviado.");
     }
 
-    private function lotWasProcessed(array $result)
+    private function parseProtocol(array $result)
     {
         if (! $result['aProt']) {
-            $this->error("Resultado desse lote estava vazio.");
-            return false;
+            $this->writeResult('Resposta desse recibo estava sem protocolo', 'error', 'Recibo sem protocolo');
         }
         $protocol = $result['aProt'];
-        $reason = $protocol['xMotivo'];
         $protocolModel = Protocol::create([
             'environment' => $this->environment,
             'protocol' => $protocol['nProt'],
             'digval' => $protocol['digVal'],
             'status_code' => $protocol['cStat'],
-            'reason' => $reason,
+            'status_msg' => $protocol['xMotivo'],
             'mdfe' => $this->key,
             'receipt' => $result['nRec'],
         ]);
@@ -241,6 +339,21 @@ class MDFe extends Command
     private function lotIsWaiting($result)
     {
         $this->warn("Documento ainda não foi processado. Tente outra vez.");
+        $this->writeResult(
+            'Documento ainda não foi processado. Tente outra vez.',
+            'warn',
+            'Documento não processado. Tente outra vez.'
+        );
+    }
+
+    private function writeResult($msg, $type = 'error', $log = null)
+    {
+        if ($log) {
+            $fileName = $this->originalFilePath . '.output';
+            File::append($fileName, $log);
+        }
+        $this->{$type}($msg);
+        die();
     }
 
     private function documentAuthorized($protocol, Protocol $protocolModel)
@@ -259,6 +372,8 @@ class MDFe extends Command
         if (!file_put_contents("{$this->basePath}/{$this->key}-protMDFe.xml", $withProtocol)) {
             throw new \Exception('Não consegui salvar o MDFe com protocolo.');
         }
+        $this->writeResult('OK', 'info', 'OK');
+        $this->deleteOriginalFile();
     }
 
     private function documentUnauthorized($protocol, Protocol $protocolModel)
@@ -268,7 +383,7 @@ class MDFe extends Command
             $r = $protocol['xMotivo'];
             $receiptNumber = str_replace('nRec:', '', substr($r, strpos($r, 'nRec:'), -1));
             // pega o recibo correto
-            $this->getRecipe($receiptNumber);
+            $this->getReceipt($receiptNumber);
         }
     }
 }
