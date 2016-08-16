@@ -378,7 +378,10 @@ class MDFe extends Command
 
     private function documentUnauthorized($protocol, Protocol $protocolModel)
     {
+        $this->info('Documento NÃO AUTORIZADO.');
+        $this->writeResult($protocolModel->status_msg, 'warn', $protocolModel->status_msg);
         if ($protocol['cStat'] == "204") {
+            $this->info('Possívelmente duplicado, buscando recibo anterior.');
             // duplicidade, vai buscar o recibo correto
             $r = $protocol['xMotivo'];
             $receiptNumber = str_replace('nRec:', '', substr($r, strpos($r, 'nRec:'), -1));
