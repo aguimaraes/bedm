@@ -129,7 +129,7 @@ class MDFe extends Command
      *
      * @return string
      */
-    private function signOriginalFile(string $file)
+    private function signOriginalFile($file)
     {
         try {
 
@@ -147,7 +147,7 @@ class MDFe extends Command
      *
      * @return int
      */
-    private function persistSignedFile(string $file)
+    private function persistSignedFile($file)
     {
         $this->signedFilePath = "{$this->basePath}/{$this->key}-mdfe-signed.xml";
         return (boolean) File::put($this->signedFilePath, $file);
@@ -236,7 +236,7 @@ class MDFe extends Command
      *
      * @return array
      */
-    private function parseLotResponse(string $response)
+    private function parseLotResponse($response)
     {
         $data = [];
 
