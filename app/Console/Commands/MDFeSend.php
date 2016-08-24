@@ -12,7 +12,7 @@ use Log;
 use NFePHP\Common\Exception\InvalidArgumentException;
 use NFePHP\MDFe\Tools;
 
-class MDFe extends Command
+class MDFeSend extends Command
 {
 
     /**

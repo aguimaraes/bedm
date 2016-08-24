@@ -13,7 +13,8 @@ class Kernel extends ConsoleKernel
      * @var array
      */
     protected $commands = [
-        Commands\MDFe::class,
+        Commands\MDFeSend::class,
+        Commands\MDFeFinish::class
         // Commands\Inspire::class,
     ];
 
