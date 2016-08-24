@@ -79,7 +79,7 @@ class MDFeFinish extends Command
         $result = [];
 
         $tool->sefazEncerra($this->key, $this->environment, 1, $protocol->protocol, '35', '3536505', $result);
-
+        dd($result);
     }
 
     /**
