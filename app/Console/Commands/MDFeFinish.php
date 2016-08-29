@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Protocol;
 use Illuminate\Console\Command;
 use NFePHP\MDFe\Tools;
+use File;
 
 class MDFeFinish extends Command
 {
