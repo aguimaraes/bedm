@@ -86,7 +86,7 @@ class MDFeFinish extends Command
 
         if ($result['cStat'] == "135") {
             $this->moveSuccessfulProtocol();
-            $this->writeResult('OK', 'info');
+            $this->writeResult('OK', 'info', 'OK');
         }
 
         $this->writeResult($result['xMotivo']);
