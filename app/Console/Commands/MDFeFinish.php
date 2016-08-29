@@ -83,7 +83,38 @@ class MDFeFinish extends Command
         $result = [];
 
         $tool->sefazEncerra($this->key, $this->environment, 1, $protocol, '35', '3536505', $result);
-        dd($result);
+
+        if ($result['cStat'] == "135") {
+            $this->moveSuccessfulProtocol();
+            $this->writeResult('OK', 'info');
+        }
+
+        $this->writeResult($result['xMotivo']);
+
+    }
+
+    private function moveSuccessfulProtocol()
+    {
+        $namespace = $this->environment == 1 ? 'producao' : 'homologacao';
+        $date = date('Ym');
+        $protocolPath = storage_path("mdfe/{$namespace}/temporarias/{$date}/{$this->key}-EncMDFe-retEventoMDFe.xml");
+        rename($protocolPath, $this->getOriginalFile() . '.finishProtocol');
+    }
+
+    private function writeResult($msg, $type = 'error', $log = null)
+    {
+        if ($log) {
+            $fileName = $this->getOriginalFile() . '.finish';
+            File::put($fileName, $log);
+        }
+        $this->{$type}($msg);
+        die();
+    }
+
+    private function getOriginalFile()
+    {
+        $inbox = env('MDFE_INBOX', storage_path('mdfe/inbox'));
+        return "{$inbox}/{$this->key}-mdfe.xml";
     }
 
     /**
