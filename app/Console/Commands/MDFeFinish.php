@@ -39,7 +39,7 @@ class MDFeFinish extends Command
      *
      * @var string
      */
-    protected $signature = 'mdfe:finish {key} {environment=2}';
+    protected $signature = 'mdfe:finish {key} {environment=2} {protocol?}';
 
     /**
      * The console command description.
@@ -70,15 +70,19 @@ class MDFeFinish extends Command
 
         $this->key = $this->argument('key');
 
+        $protocol = $this->argument('protocol');
+
         $this->cnpj = substr($this->key, 6, 14);
 
         $tool = $this->getTool();
 
-        $protocol = $this->getSuccessfulProtocol();
+        if (empty($protocol)) {
+            $protocol = $this->getSuccessfulProtocol();
+        }
 
         $result = [];
 
-        $tool->sefazEncerra($this->key, $this->environment, 1, $protocol->protocol, '35', '3536505', $result);
+        $tool->sefazEncerra($this->key, $this->environment, 1, $protocol, '35', '3536505', $result);
         dd($result);
     }
 
@@ -119,6 +123,6 @@ class MDFeFinish extends Command
             $this->error('MDFe não emitido ou protocolo não encontrado.');
             die;
         }
-        return $protocol;
+        return $protocol->protocol;
     }
 }
