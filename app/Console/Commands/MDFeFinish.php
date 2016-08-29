@@ -98,13 +98,13 @@ class MDFeFinish extends Command
         $namespace = $this->environment == 1 ? 'producao' : 'homologacao';
         $date = date('Ym');
         $protocolPath = storage_path("mdfe/{$namespace}/temporarias/{$date}/{$this->key}-EncMDFe-retEventoMDFe.xml");
-        rename($protocolPath, $this->getOriginalFile() . '.finishProtocol');
+        rename($protocolPath, $this->getOriginalFile() . '.finishProtocol.xml');
     }
 
     private function writeResult($msg, $type = 'error', $log = null)
     {
         if ($log) {
-            $fileName = $this->getOriginalFile() . '.finish';
+            $fileName = $this->getOriginalFile() . '.finish.txt';
             File::put($fileName, $log);
         }
         $this->{$type}($msg);
@@ -114,7 +114,7 @@ class MDFeFinish extends Command
     private function getOriginalFile()
     {
         $inbox = env('MDFE_INBOX', storage_path('mdfe/inbox'));
-        return "{$inbox}/{$this->key}-mdfe.xml";
+        return "{$inbox}/{$this->key}-mdfe";
     }
 
     /**
