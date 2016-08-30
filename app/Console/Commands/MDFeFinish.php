@@ -59,11 +59,6 @@ class MDFeFinish extends Command
         parent::__construct();
     }
 
-    /**
-     * Execute the console command.
-     *
-     * @return mixed
-     */
     public function handle()
     {
 
@@ -90,8 +85,7 @@ class MDFeFinish extends Command
             $this->writeResult('OK', 'info', 'OK');
         }
 
-        $this->writeResult($result['xMotivo']);
-
+        $this->writeResult($result['xMotivo'], 'error', $result['xMotivo']);
     }
 
     private function moveSuccessfulProtocol()
