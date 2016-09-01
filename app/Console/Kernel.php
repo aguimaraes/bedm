@@ -14,7 +14,8 @@ class Kernel extends ConsoleKernel
      */
     protected $commands = [
         Commands\MDFeSend::class,
-        Commands\MDFeFinish::class
+        Commands\MDFeFinish::class,
+        Commands\MDFeCancel::class,
         // Commands\Inspire::class,
     ];
 
