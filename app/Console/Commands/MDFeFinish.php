@@ -47,7 +47,7 @@ class MDFeFinish extends Command
      *
      * @var string
      */
-    protected $description = 'Command description';
+    protected $description = 'Finaliza o MDFe.';
 
     /**
      * Create a new command instance.
